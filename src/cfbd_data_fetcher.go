@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -22,16 +23,16 @@ var (
 
 type Game = map[string]interface{}
 
-type GameFetcher struct {
+type fetcher struct {
 	url     string
 	api_key string
 	client  *http.Client
 }
 
-func (f *GameFetcher) fetchGame(year string) ([]byte, error) {
+func (f *fetcher) cfbdFetcher(resource string, year string) ([]byte, error) {
 
-	urlGetByYear := f.url + "/games?year=" + year
-	fmt.Println("getting year ", year, "->", urlGetByYear)
+	urlGetByYear := f.url + "/" + resource + "?year=" + year
+	fmt.Println("getting ", resource, " for year ", year, "->", urlGetByYear)
 
 	req, err := http.NewRequest("GET", urlGetByYear, nil)
 	if err != nil {
@@ -57,8 +58,8 @@ func (f *GameFetcher) fetchGame(year string) ([]byte, error) {
 	return body, nil
 }
 
-func saveData(body []byte, year string) error {
-	dir := filepath.Join("data", "games")
+func saveData(body []byte, resource string, year string) error {
+	dir := filepath.Join("data", resource)
 	file := filepath.Join(dir, year+".json")
 	os.MkdirAll(dir, 0755)
 
@@ -73,26 +74,39 @@ func main() {
 	message := "here we go!"
 	println(message)
 
+	resourcePtr := flag.String("resource", "", "Resource to fetch: games or rankings")
+	fromPtr := flag.Int("from", 2000, "Start year")
+	toPtr := flag.Int("to", 2025, "End year")
+	flag.Parse()
+
+	resource := *resourcePtr
+	from := *fromPtr
+	to := *toPtr
+
+	if resource != "games" && resource != "rankings" {
+		log.Fatal("Resource must be 'games' or 'rankings'")
+	}
+
 	err := godotenv.Load()
 	if err != nil {
 		fmt.Println("No .env file found")
 	}
 
-	fetcher := GameFetcher{
+	fetcher := fetcher{
 		url:     getEnv("CFB_API_URL", true),
 		api_key: getEnv("CFBD_API_KEY", false),
 		client:  &http.Client{},
 	}
 
 	//ctx := context.Background()
-	for i := 2000; i <= 2025; i++ {
+	for i := from; i <= to; i++ {
 		getYear := strconv.Itoa(i)
-		games, err := fetcher.fetchGame(getYear)
+		games, err := fetcher.cfbdFetcher(resource, getYear)
 		if err != nil {
 			fmt.Println("Error retrieving ", getYear, "->", err)
 		}
 
-		err = saveData(games, getYear)
+		err = saveData(games, resource, getYear)
 		if err != nil {
 			fmt.Println(err)
 		}
